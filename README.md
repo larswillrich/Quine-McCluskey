@@ -1,1 +1,1 @@
-# Quine-McCluskey
+Quine-McCluskey

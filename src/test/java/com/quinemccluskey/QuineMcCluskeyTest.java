@@ -22,6 +22,12 @@ public class QuineMcCluskeyTest {
 		String resultQuineMcCluskey = DNFCreatorByQuineMcCluskey.run(term);
 
 		equal("A+B/A+C", resultJBoolExpression);
+		isDNF(resultJBoolExpression);
+	}
+
+	private void isDNF(String resultJBoolExpression) {
+		// TODO Auto-generated method stub
+
 	}
 
 	/**

@@ -14,4 +14,13 @@ public class JBoolExpressionDNFCreator {
 		String reconvertToJBoolOperators = TermConverter.reconvertToJBoolOperators(dnf.toString());
 		return reconvertToJBoolOperators;
 	}
+
+	public static String simplify(String term) {
+		String convertToJBoolOperators = TermConverter.convertToJBoolOperators(term);
+		Expression<String> nonStandard = ExprParser.parse(convertToJBoolOperators);
+
+		Expression<String> dnf = RuleSet.simplify(nonStandard);
+		String reconvertToJBoolOperators = TermConverter.reconvertToJBoolOperators(dnf.toString());
+		return reconvertToJBoolOperators;
+	}
 }

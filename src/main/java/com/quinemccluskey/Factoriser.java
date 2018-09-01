@@ -37,13 +37,30 @@ public class Factoriser {
 		while (!contentOfBrackets.isEmpty()) {
 			String firstBracket = contentOfBrackets.get(0);
 
+			// remove minus, if there is one
+			if (!condition.startsWith(firstBracket)) {
+				int indexOfSign = condition.indexOf(firstBracket) - 1;
+				if (MINUS.equals(String.valueOf(condition.charAt(indexOfSign)))) {
+					String firstBracketDeMorgan = DeMorgan.applyDeMorganIfNegativeCondition(MINUS + firstBracket);
+					firstBracketDeMorgan = firstBracketDeMorgan.replaceAll(BLANK, EMPTY_STRING);
+					condition = condition.replaceFirst(Pattern.quote(MINUS + firstBracket),
+							BRACKETOPEN + firstBracketDeMorgan + BRACKETCLOSE);
+
+					contentOfBrackets = getContentOfBrackets(condition);
+					continue;
+				}
+			}
+
 			// remove brackets
 			String contentOfFirstBracketWithoutBracket = firstBracket.substring(1, firstBracket.length() - 1);
 			String termWithoutBracket = find(contentOfFirstBracketWithoutBracket);
 
 			Product product = multiply(condition, firstBracket, termWithoutBracket);
 
-			// TODO: replace also correct factor
+			if (product.bothSitesWithAND) {
+				product.setProduct(BRACKETOPEN + product.getProduct() + BRACKETCLOSE);
+			}
+
 			condition = condition.replaceFirst(Pattern.quote(product.getTermToReplace()), product.getProduct());
 
 			contentOfBrackets = getContentOfBrackets(condition);
@@ -55,6 +72,11 @@ public class Factoriser {
 	private static Product multiply(String term, String termToReplace, String termWithoutBracket) {
 
 		Product p = new Factoriser().new Product();
+		if (term.equals(termToReplace)) {
+			p.setProduct(term);
+			p.setTermToReplace(removeOnlyOuterBracket(termToReplace));
+			return p;
+		}
 
 		String factorA = getFactorToMultiply(term, termToReplace, p);
 		String[] factorBs = termWithoutBracket.split(OR);
@@ -63,14 +85,13 @@ public class Factoriser {
 			product += OR + factorA + AND + factorB;
 		}
 		product = product.substring(1, product.length());
-		term = term.replaceFirst(Pattern.quote(termToReplace), product);
 		p.setProduct(product);
 		return p;
 	}
 
 	private static String getFactorToMultiply(String term, String termToReplace, Product p) {
 		int indexOf = term.indexOf(termToReplace);
-		int indexOfConcerningOperator = getIndexOfConcerningOperator(term, termToReplace);
+		int indexOfConcerningOperator = getIndexOfConcerningOperator(term, termToReplace, p);
 
 		String factor = null;
 		// look at factor after operator
@@ -101,8 +122,9 @@ public class Factoriser {
 						stillFactor = false;
 						continue;
 					}
+				} else {
+					charAt = term.charAt(indexOfVariableEnd);
 				}
-				charAt = term.charAt(indexOfVariableEnd);
 			}
 
 			p.setEndOfNewProduct(indexOfVariableEnd + 1);
@@ -127,6 +149,7 @@ public class Factoriser {
 				} else if (OR.compareTo(String.valueOf(charAt)) == 0) {
 					if (bracketLevel == 0) {
 						stillFactor = false;
+						indexOfVariableStart++;
 						continue;
 					}
 				}
@@ -137,15 +160,17 @@ public class Factoriser {
 						stillFactor = false;
 						continue;
 					}
+				} else {
+					charAt = term.charAt(indexOfVariableStart);
 				}
-				charAt = term.charAt(indexOfVariableStart);
+
 			}
 
 			p.setEndOfNewProduct(indexOf);
 			p.setStartOfNewProduct(indexOfVariableStart);
 			p.setTermToReplace(term.substring(indexOfVariableStart, indexOfConcerningOperator + 1) + termToReplace);
 
-			factor = term.substring(indexOfVariableStart, indexOfConcerningOperator - 1);
+			factor = term.substring(indexOfVariableStart, indexOfConcerningOperator);
 		}
 
 		return factor;
@@ -157,13 +182,14 @@ public class Factoriser {
 	 * 
 	 * @param term
 	 * @param termToReplace
+	 * @param p
 	 * @return
 	 */
-	private static int getIndexOfConcerningOperator(String term, String termToReplace) {
+	private static int getIndexOfConcerningOperator(String term, String termToReplace, Product p) {
 		int indexOf = term.indexOf(termToReplace);
 
 		// look at operator after closing bracket
-		if (term.indexOf(termToReplace) == indexOf) {
+		if (term.indexOf(termToReplace) == 0) {
 			return indexOf + termToReplace.length();
 		} else {
 			int indexOfBracketBeforeBracket = indexOf;
@@ -174,13 +200,14 @@ public class Factoriser {
 				return indexOfBracketAfterBracket;
 			}
 
-			if (term.substring(indexOfBracketBeforeBracket, indexOfBracketBeforeBracket + 1).equals(OR)) {
+			if (term.substring(indexOfBracketBeforeBracket - 1, indexOfBracketBeforeBracket).equals(OR)) {
 				if (term.substring(indexOfBracketAfterBracket, indexOfBracketAfterBracket + 1).equals(OR)) {
 					return -1;
 				}
 				return indexOfBracketAfterBracket;
 			} else {
-				return indexOfBracketBeforeBracket;
+				p.setBothSitesWithAND(true);
+				return indexOfBracketBeforeBracket - 1;
 			}
 		}
 	}
@@ -188,8 +215,8 @@ public class Factoriser {
 	/**
 	 * This method creates all possible boolean assignments in form of
 	 * CodeConfigurations for a conjunctive term like A+B+C+(D/E/F+G)+H. In this
-	 * case 5 collections will be overhanded for A,B,C, (D/E/F+G), H. Every part
-	 * of condition (A,B,C...) is represented as a List of CodeConfiguratios and
+	 * case 5 collections will be overhanded for A,B,C, (D/E/F+G), H. Every part of
+	 * condition (A,B,C...) is represented as a List of CodeConfiguratios and
 	 * contains all possible configurations for this conjunctive part.
 	 * 
 	 * @param conjunctionTermsConfigurations
@@ -230,8 +257,8 @@ public class Factoriser {
 	/**
 	 * This method creates all possible boolean assignments in form of
 	 * CodeConfigurations for a discjuntive term like A/B/C/(D+E/F+G)/H. In this
-	 * case 5 collections will be overhanded for A,B,C, (D+E/F+G), H. Every part
-	 * of condition (A,B,C...) is represented as a List of CodeConfiguratios and
+	 * case 5 collections will be overhanded for A,B,C, (D+E/F+G), H. Every part of
+	 * condition (A,B,C...) is represented as a List of CodeConfiguratios and
 	 * contains all possible configurations for this disjunctive part.
 	 * 
 	 * @param disjunctionTermsConfigurations
@@ -280,9 +307,8 @@ public class Factoriser {
 
 	/**
 	 * This method creates all possible boolean assignments (true and false) for
-	 * given List of AregMasterData. Also a fix CodeConfiguration can be
-	 * overhanded by an argument and will be a part of every created
-	 * CodeConfiguration.
+	 * given List of AregMasterData. Also a fix CodeConfiguration can be overhanded
+	 * by an argument and will be a part of every created CodeConfiguration.
 	 * 
 	 * @param fixConfig
 	 *            CodeConfiguration which should be part of every created
@@ -290,8 +316,8 @@ public class Factoriser {
 	 * @param allCodes
 	 *            for this code-list all possible configuration will be created
 	 * @param codeTypesOnlyAllowedOnce
-	 *            is a list defining codeTypes for given business functionality.
-	 *            Is set in method find() of this class.
+	 *            is a list defining codeTypes for given business functionality. Is
+	 *            set in method find() of this class.
 	 * @param codeToExclusionClassMapper
 	 * @return
 	 */
@@ -509,6 +535,15 @@ public class Factoriser {
 		String product = "";
 		int startOfNewProduct = -1;
 		int endOfNewProduct = -1;
+		boolean bothSitesWithAND = false;
+
+		public boolean isBothSitesWithAND() {
+			return bothSitesWithAND;
+		}
+
+		public void setBothSitesWithAND(boolean bothSitesWithAND) {
+			this.bothSitesWithAND = bothSitesWithAND;
+		}
 
 		public String getTermToReplace() {
 			return termToReplace;

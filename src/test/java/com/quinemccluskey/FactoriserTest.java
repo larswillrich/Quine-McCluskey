@@ -71,8 +71,6 @@ public class FactoriserTest {
 		result = TermConverter.reconvertToJBoolOperators(resultExpr.toString());
 
 		if (withAssertion) {
-			System.out.println("expect: " + expect);
-			System.out.println("result: " + result);
 			Assert.assertEquals(expect, result);
 		}
 		return expect.equals(result);

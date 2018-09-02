@@ -37,7 +37,7 @@ public class Factoriser {
 		while (!contentOfBrackets.isEmpty()) {
 			String firstBracket = contentOfBrackets.get(0);
 
-			// remove minus, if there is one
+			// if bracket is negativ, reformat it by deMorgan
 			if (condition.indexOf(firstBracket) > 0) {
 				int indexOfSign = condition.indexOf(firstBracket) - 1;
 				if (MINUS.equals(String.valueOf(condition.charAt(indexOfSign)))) {
@@ -51,23 +51,13 @@ public class Factoriser {
 				}
 			}
 
-			// remove brackets
-			String contentOfFirstBracketWithoutBracket = firstBracket.substring(1, firstBracket.length() - 1);
-			while (outerBracketsExist(contentOfFirstBracketWithoutBracket)) {
-				contentOfFirstBracketWithoutBracket = removeOnlyOuterBracket(contentOfFirstBracketWithoutBracket);
-			}
-
+			// remove outer brackets
+			String contentOfFirstBracketWithoutBracket = removeOuterBracket(firstBracket);
 			String termWithoutBracket = find(contentOfFirstBracketWithoutBracket, level + 1);
 
 			Product product = multiply(condition, firstBracket, termWithoutBracket);
 
-			if (product.bothSitesWithAND) {
-				product.setProduct(BRACKETOPEN + product.getProduct() + BRACKETCLOSE);
-			}
-
 			condition = condition.replaceFirst(Pattern.quote(product.getTermToReplace()), product.getProduct());
-
-			analyseTerm(condition, level);
 
 			contentOfBrackets = getContentOfBrackets(condition);
 		}
@@ -75,37 +65,28 @@ public class Factoriser {
 		return condition;
 	}
 
-	private static void analyseTerm(String term, int level) {
-		System.out.print(level + ".) length: " + term.length());
-		System.out.println(" number brackets: " + countBrackets(term));
-	}
-
-	private static int countBrackets(String term) {
-		String termWithoutBracket = term.substring(1, term.length() - 1);
-		List<String> contentOfBrackets = getContentOfBrackets(termWithoutBracket);
-		int brackets = 1;
-		for (String string : contentOfBrackets) {
-			brackets += countBrackets(string);
-		}
-		return brackets;
-	}
-
 	private static Product multiply(String term, String termToReplace, String termWithoutBracket) {
 
 		Product p = new Factoriser().new Product();
 		if (term.equals(termToReplace)) {
-			termToReplace = removeOnlyOuterBracket(termToReplace);
+			termToReplace = removeOuterBracket(termToReplace);
 
 			p.setProduct(termToReplace);
 			p.setTermToReplace(term);
 			return p;
 		}
 
-		String factorA = getFactorToMultiply(term, termToReplace, p);
+		int indexOfConcerningOperator = getIndexOfConcerningOperator(term, termToReplace, p);
 
-		if (factorA == null) {
+		// if there are OR operators at both sites, just remove brackets
+		if (indexOfConcerningOperator == -1) {
+			String termToReplaceWithoutBrackets = removeOuterBracket(termToReplace);
+			p.setProduct(termToReplaceWithoutBrackets);
+			p.setTermToReplace(termToReplace);
 			return p;
 		}
+
+		String factorA = getFactorToMultiply(term, termToReplace, indexOfConcerningOperator, p);
 
 		String[] factorBs = termWithoutBracket.split(OR);
 		String product = "";
@@ -113,21 +94,19 @@ public class Factoriser {
 			product += OR + factorA + AND + factorB;
 		}
 		product = product.substring(1, product.length());
-		p.setProduct(product);
+
+		if (p.bothSitesWithAND) {
+			p.setProduct(BRACKETOPEN + product + BRACKETCLOSE);
+		} else {
+			p.setProduct(product);
+		}
+
 		return p;
 	}
 
-	private static String getFactorToMultiply(String term, String termToReplace, Product p) {
+	private static String getFactorToMultiply(String term, String termToReplace, int indexOfConcerningOperator,
+			Product p) {
 		int indexOf = term.indexOf(termToReplace);
-		int indexOfConcerningOperator = getIndexOfConcerningOperator(term, termToReplace, p);
-
-		if (indexOfConcerningOperator == -1
-				|| OR.compareTo(String.valueOf(term.charAt(indexOfConcerningOperator))) == 0) {
-			String termToReplaceWithoutBrackets = removeOnlyOuterBracket(termToReplace);
-			p.setProduct(termToReplaceWithoutBrackets);
-			p.setTermToReplace(termToReplace);
-			return null;
-		}
 
 		String factor = null;
 		// look at factor after operator
@@ -163,10 +142,7 @@ public class Factoriser {
 				}
 			}
 
-			p.setEndOfNewProduct(indexOfVariableEnd + 1);
-			p.setStartOfNewProduct(indexOf);
 			p.setTermToReplace(termToReplace + term.substring(indexOfConcerningOperator, indexOfVariableEnd));
-
 			factor = term.substring(indexOfConcerningOperator + 1, indexOfVariableEnd);
 
 		} else {
@@ -199,16 +175,11 @@ public class Factoriser {
 				} else {
 					charAt = term.charAt(indexOfVariableStart);
 				}
-
 			}
 
-			p.setEndOfNewProduct(indexOf);
-			p.setStartOfNewProduct(indexOfVariableStart);
 			p.setTermToReplace(term.substring(indexOfVariableStart, indexOfConcerningOperator + 1) + termToReplace);
-
 			factor = term.substring(indexOfVariableStart, indexOfConcerningOperator);
 		}
-
 		return factor;
 	}
 
@@ -226,6 +197,9 @@ public class Factoriser {
 
 		// look at operator after closing bracket
 		if (term.indexOf(termToReplace) == 0) {
+			if (term.substring(indexOf + termToReplace.length(), indexOf + termToReplace.length() + 1).equals(OR)) {
+				return -1;
+			}
 			return indexOf + termToReplace.length();
 		} else {
 			int indexOfOperatorBeforeBracket = indexOf - 1;
@@ -233,6 +207,9 @@ public class Factoriser {
 
 			// look at character before bracket
 			if (indexOfBracketAfterBracket == term.length()) {
+				if (term.substring(indexOfOperatorBeforeBracket, indexOfOperatorBeforeBracket + 1).equals(OR)) {
+					return -1;
+				}
 				return indexOfOperatorBeforeBracket;
 			}
 
@@ -241,9 +218,15 @@ public class Factoriser {
 					if (term.substring(indexOfBracketAfterBracket, indexOfBracketAfterBracket + 1).equals(OR)) {
 						return -1;
 					}
+
+					// Has to be an AND after bracket
 					return indexOfBracketAfterBracket;
 				} else if (term.substring(indexOfOperatorBeforeBracket, indexOfOperatorBeforeBracket + 1).equals(AND)) {
-					p.setBothSitesWithAND(true);
+					if (term.substring(indexOfBracketAfterBracket, indexOfBracketAfterBracket + 1).equals(AND)) {
+						p.setBothSitesWithAND(true);
+						return indexOfOperatorBeforeBracket;
+					}
+
 					return indexOfOperatorBeforeBracket;
 				} else {
 					indexOfOperatorBeforeBracket--;
@@ -251,172 +234,6 @@ public class Factoriser {
 				}
 			}
 		}
-	}
-
-	/**
-	 * This method creates all possible boolean assignments in form of
-	 * CodeConfigurations for a conjunctive term like A+B+C+(D/E/F+G)+H. In this
-	 * case 5 collections will be overhanded for A,B,C, (D/E/F+G), H. Every part of
-	 * condition (A,B,C...) is represented as a List of CodeConfiguratios and
-	 * contains all possible configurations for this conjunctive part.
-	 * 
-	 * @param conjunctionTermsConfigurations
-	 * @param codeTypesOnlyAllowedOnce
-	 * @param codeToExclusionClassMapper
-	 * @return
-	 */
-	private static Collection<Map<String, Boolean>> createConfigurationsForConjunction(
-			Collection<Collection<Map<String, Boolean>>> conjunctionTermsConfigurations) {
-
-		Collection<Map<String, Boolean>> results = new ArrayList<Map<String, Boolean>>();
-
-		if (conjunctionTermsConfigurations.isEmpty()) {
-			return results;
-		}
-		if (conjunctionTermsConfigurations.size() == 1) {
-			return conjunctionTermsConfigurations.iterator().next();
-		}
-
-		Collection<Map<String, Boolean>> firstElement = conjunctionTermsConfigurations.iterator().next();
-		conjunctionTermsConfigurations.remove(firstElement);
-		Collection<Map<String, Boolean>> permuateConfigurations = createConfigurationsForConjunction(
-				conjunctionTermsConfigurations);
-
-		for (Map<String, Boolean> config : firstElement) {
-			for (Map<String, Boolean> configsFromOther : permuateConfigurations) {
-				Map<String, Boolean> newConfig = new HashMap<String, Boolean>();
-
-				newConfig.putAll(configsFromOther);
-				newConfig.putAll(config);
-				results.add(newConfig);
-			}
-		}
-
-		return results;
-	}
-
-	/**
-	 * This method creates all possible boolean assignments in form of
-	 * CodeConfigurations for a discjuntive term like A/B/C/(D+E/F+G)/H. In this
-	 * case 5 collections will be overhanded for A,B,C, (D+E/F+G), H. Every part of
-	 * condition (A,B,C...) is represented as a List of CodeConfiguratios and
-	 * contains all possible configurations for this disjunctive part.
-	 * 
-	 * @param disjunctionTermsConfigurations
-	 * @param codeTypesOnlyAllowedOnce
-	 * @param codeToAregMasterDataMap
-	 * @param codeToExclusionClassMapper
-	 * @return
-	 */
-	private static Collection<Map<String, Boolean>> createConfigurationsForDisjunction(
-			Map<String, Collection<Map<String, Boolean>>> disjunctionTermsConfigurations) {
-
-		if (disjunctionTermsConfigurations.size() == 1) {
-			return disjunctionTermsConfigurations.values().iterator().next();
-		}
-		Set<Map<String, Boolean>> result = new HashSet<Map<String, Boolean>>();
-
-		Set<String> disjunctionTerms = disjunctionTermsConfigurations.keySet();
-
-		for (String disjunctionTerm : disjunctionTerms) {
-
-			// get current disjunctive part and remove only this from all
-			// available codes. Then create all possible assignments (true,
-			// false) for all lever over codes, because only one positive
-			// Codeconfiguration has to be exist to make the whole expression to
-			// true
-			Collection<Map<String, Boolean>> positiveConfigurations = disjunctionTermsConfigurations
-					.get(disjunctionTerm);
-			Set<String> allOtherCodes = removeAllCodes(disjunctionTerms, disjunctionTerm);
-
-			if (allOtherCodes.isEmpty()) {
-				continue;
-			}
-
-			Collection<Map<String, Boolean>> createAllPossibleAssigmnents = createAllPossibleAssigmnents(allOtherCodes);
-
-			for (Map<String, Boolean> positiveConfig : positiveConfigurations) {
-				for (Map<String, Boolean> configOfOther : createAllPossibleAssigmnents) {
-					Map<String, Boolean> newConfiguration = new HashMap<>(positiveConfig);
-					newConfiguration.putAll(configOfOther);
-					result.add(newConfiguration);
-				}
-			}
-		}
-		return result;
-	}
-
-	/**
-	 * This method creates all possible boolean assignments (true and false) for
-	 * given List of AregMasterData. Also a fix CodeConfiguration can be overhanded
-	 * by an argument and will be a part of every created CodeConfiguration.
-	 * 
-	 * @param fixConfig
-	 *            CodeConfiguration which should be part of every created
-	 *            CodeConfiguration
-	 * @param allCodes
-	 *            for this code-list all possible configuration will be created
-	 * @param codeTypesOnlyAllowedOnce
-	 *            is a list defining codeTypes for given business functionality. Is
-	 *            set in method find() of this class.
-	 * @param codeToExclusionClassMapper
-	 * @return
-	 */
-	private static Collection<Map<String, Boolean>> createAllPossibleAssigmnents(Collection<String> allCodes) {
-		Collection<Map<String, Boolean>> result = new ArrayList<Map<String, Boolean>>();
-		Map<String, Boolean> configFalse = null;
-		Map<String, Boolean> configTrue = null;
-
-		if (allCodes.size() == 1) {
-			String next = allCodes.iterator().next();
-
-			configFalse = new HashMap<>();
-			configFalse.put(next, false);
-
-			configTrue = new HashMap<>();
-			configTrue.put(next, true);
-
-			result.add(configFalse);
-			result.add(configTrue);
-			return result;
-		}
-
-		String next = allCodes.iterator().next();
-		allCodes.remove(next);
-		Collection<Map<String, Boolean>> createAllPossibleAssigmnents = createAllPossibleAssigmnents(allCodes);
-
-		for (Map<String, Boolean> config : createAllPossibleAssigmnents) {
-
-			configFalse = new HashMap<String, Boolean>();
-			configFalse.put(next, false);
-			configFalse.putAll(config);
-			result.add(configFalse);
-
-			configTrue = new HashMap<String, Boolean>();
-			configTrue.put(next, true);
-			configTrue.putAll(config);
-			result.add(configTrue);
-		}
-
-		return result;
-	}
-
-	/**
-	 * This method removes all codes from given list of conditions
-	 * 
-	 * @param conditions
-	 * @param codesToRemove
-	 * @return List of all left over codes
-	 */
-	private static Set<String> removeAllCodes(Set<String> conditions, String codesToRemove) {
-		Set<String> allCodes = new HashSet<String>();
-		for (String condition : conditions) {
-			allCodes.addAll(extractCodesFromBuildability(condition));
-		}
-
-		Set<String> allCodesOfDisjunctionTerm = extractCodesFromBuildability(codesToRemove);
-		allCodes.removeAll(allCodesOfDisjunctionTerm);
-		return allCodes;
 	}
 
 	private static Set<String> extractCodesFromBuildability(String buildabilityCondition) {
@@ -438,6 +255,16 @@ public class Factoriser {
 		return result;
 	}
 
+	private static int getNumberOfCodes(String buildabilityCondition) {
+		if (buildabilityCondition == null) {
+			return 0;
+		}
+		String newBuildabilityCondition = buildabilityCondition.replaceAll(REGEX_GET_BRACKETS_AND_LOGICAL_EXP_CHARS,
+				SPACE_SIGN);
+		List<String> splited = Arrays.asList(newBuildabilityCondition.split(SPACE_SIGN));
+		return splited.size();
+	}
+
 	/**
 	 * This method removes only outer brackets. Also if there is a minus, the
 	 * possible
@@ -445,7 +272,7 @@ public class Factoriser {
 	 * @param condition
 	 * @return
 	 */
-	private static String removeOnlyOuterBracket(String condition) {
+	private static String removeOuterBracket(String condition) {
 		while (outerBracketsExist(condition)) {
 			if (!isPositive(condition)) {
 				condition = condition.substring(1, condition.length());
@@ -455,25 +282,6 @@ public class Factoriser {
 			}
 		}
 		return condition;
-	}
-
-	private static List<String> splitConditionByOperator(String expression, String separator) {
-		List<String> splitSubExpressions = new ArrayList<>();
-		Splitter splitter = Splitter.on(separator);
-		Iterator<String> iterator = splitter.split(expression).iterator();
-
-		StringBuilder conditionPart = new StringBuilder();
-		while (iterator.hasNext()) {
-			conditionPart.append(iterator.next());
-			if (StringUtils.countMatches(conditionPart.toString(), "(") == StringUtils
-					.countMatches(conditionPart.toString(), ")")) {
-				splitSubExpressions.add(conditionPart.toString());
-				conditionPart.setLength(0);
-			} else {
-				conditionPart.append(separator);
-			}
-		}
-		return splitSubExpressions;
 	}
 
 	private static boolean isPositive(String condition) {
@@ -571,11 +379,27 @@ public class Factoriser {
 		return foundBrackets;
 	}
 
+	private static void analyseTerm(String term, int level) {
+		System.out.print(level + ".) length: " + term.length());
+		System.out.println(" number brackets: " + countBrackets(term));
+		Set<String> extractCodesFromBuildability = extractCodesFromBuildability(term);
+		System.out.print(extractCodesFromBuildability.size() + "/");
+		System.out.println(getNumberOfCodes(term));
+	}
+
+	private static int countBrackets(String term) {
+		String termWithoutBracket = term.substring(1, term.length() - 1);
+		List<String> contentOfBrackets = getContentOfBrackets(termWithoutBracket);
+		int brackets = 1;
+		for (String string : contentOfBrackets) {
+			brackets += countBrackets(string);
+		}
+		return brackets;
+	}
+
 	class Product {
 		String termToReplace = "";
 		String product = "";
-		int startOfNewProduct = -1;
-		int endOfNewProduct = -1;
 		boolean bothSitesWithAND = false;
 
 		public boolean isBothSitesWithAND() {
@@ -601,22 +425,5 @@ public class Factoriser {
 		public void setProduct(String product) {
 			this.product = product;
 		}
-
-		public int getStartOfNewProduct() {
-			return startOfNewProduct;
-		}
-
-		public void setStartOfNewProduct(int startOfNewProduct) {
-			this.startOfNewProduct = startOfNewProduct;
-		}
-
-		public int getEndOfNewProduct() {
-			return endOfNewProduct;
-		}
-
-		public void setEndOfNewProduct(int endOfNewProduct) {
-			this.endOfNewProduct = endOfNewProduct;
-		}
-
 	}
 }

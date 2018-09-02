@@ -17,10 +17,11 @@ public class DeMorgan {
 	private static final String BRACKETOPEN = "(";
 	private static final String BRACKETCLOSE = ")";
 	private static final String EMPTY_STRING = "";
+	private static final String BLANK = " ";
 
 	/**
-	 * This method apply DeMorgan on boolean expressions. But only for
-	 * expressions, where a minus is in front of bracket
+	 * This method apply DeMorgan on boolean expressions. But only for expressions,
+	 * where a minus is in front of bracket
 	 * 
 	 * @param condition
 	 * @return
@@ -29,6 +30,7 @@ public class DeMorgan {
 		StringBuilder denMorganString = new StringBuilder();
 
 		condition = JBoolExpressionDNFCreator.simplify(condition);
+		condition = condition.replaceAll(BLANK, EMPTY_STRING);
 
 		// check pattern of term to be treated
 		if (outerBracketsExist(condition) && condition.startsWith(MINUS)) {

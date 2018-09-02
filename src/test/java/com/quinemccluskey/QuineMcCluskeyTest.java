@@ -22,12 +22,13 @@ public class QuineMcCluskeyTest {
 		String resultQuineMcCluskey = DNFCreatorByQuineMcCluskey.run(term);
 
 		equal("A+B/A+C", resultJBoolExpression);
-		isDNF(resultJBoolExpression);
+		Assert.assertTrue(isDNF(resultJBoolExpression));
 	}
 
-	private void isDNF(String resultJBoolExpression) {
-		// TODO Auto-generated method stub
-
+	public static boolean isDNF(String resultJBoolExpression) {
+		boolean bracketsInside = resultJBoolExpression.contains(BRACKETOPEN)
+				|| resultJBoolExpression.contains(BRACKETCLOSE);
+		return bracketsInside;
 	}
 
 	/**

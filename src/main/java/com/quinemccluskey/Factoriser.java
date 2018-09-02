@@ -30,7 +30,7 @@ public class Factoriser {
 	public final static String TRUE_CONDITION_VALUE = "true";
 	public final static String FALSE_CONDITION_VALUE = "false";
 
-	public static String find(String condition) {
+	public static String find(String condition, int level) {
 		condition = condition.replace(BLANK, EMPTY_STRING);
 
 		List<String> contentOfBrackets = getContentOfBrackets(condition);
@@ -38,7 +38,7 @@ public class Factoriser {
 			String firstBracket = contentOfBrackets.get(0);
 
 			// remove minus, if there is one
-			if (!condition.startsWith(firstBracket)) {
+			if (condition.indexOf(firstBracket) > 0) {
 				int indexOfSign = condition.indexOf(firstBracket) - 1;
 				if (MINUS.equals(String.valueOf(condition.charAt(indexOfSign)))) {
 					String firstBracketDeMorgan = DeMorgan.applyDeMorganIfNegativeCondition(MINUS + firstBracket);
@@ -53,7 +53,11 @@ public class Factoriser {
 
 			// remove brackets
 			String contentOfFirstBracketWithoutBracket = firstBracket.substring(1, firstBracket.length() - 1);
-			String termWithoutBracket = find(contentOfFirstBracketWithoutBracket);
+			while (outerBracketsExist(contentOfFirstBracketWithoutBracket)) {
+				contentOfFirstBracketWithoutBracket = removeOnlyOuterBracket(contentOfFirstBracketWithoutBracket);
+			}
+
+			String termWithoutBracket = find(contentOfFirstBracketWithoutBracket, level + 1);
 
 			Product product = multiply(condition, firstBracket, termWithoutBracket);
 
@@ -63,22 +67,46 @@ public class Factoriser {
 
 			condition = condition.replaceFirst(Pattern.quote(product.getTermToReplace()), product.getProduct());
 
+			analyseTerm(condition, level);
+
 			contentOfBrackets = getContentOfBrackets(condition);
 		}
 
 		return condition;
 	}
 
+	private static void analyseTerm(String term, int level) {
+		System.out.print(level + ".) length: " + term.length());
+		System.out.println(" number brackets: " + countBrackets(term));
+	}
+
+	private static int countBrackets(String term) {
+		String termWithoutBracket = term.substring(1, term.length() - 1);
+		List<String> contentOfBrackets = getContentOfBrackets(termWithoutBracket);
+		int brackets = 1;
+		for (String string : contentOfBrackets) {
+			brackets += countBrackets(string);
+		}
+		return brackets;
+	}
+
 	private static Product multiply(String term, String termToReplace, String termWithoutBracket) {
 
 		Product p = new Factoriser().new Product();
 		if (term.equals(termToReplace)) {
-			p.setProduct(term);
-			p.setTermToReplace(removeOnlyOuterBracket(termToReplace));
+			termToReplace = removeOnlyOuterBracket(termToReplace);
+
+			p.setProduct(termToReplace);
+			p.setTermToReplace(term);
 			return p;
 		}
 
 		String factorA = getFactorToMultiply(term, termToReplace, p);
+
+		if (factorA == null) {
+			return p;
+		}
+
 		String[] factorBs = termWithoutBracket.split(OR);
 		String product = "";
 		for (String factorB : factorBs) {
@@ -92,6 +120,14 @@ public class Factoriser {
 	private static String getFactorToMultiply(String term, String termToReplace, Product p) {
 		int indexOf = term.indexOf(termToReplace);
 		int indexOfConcerningOperator = getIndexOfConcerningOperator(term, termToReplace, p);
+
+		if (indexOfConcerningOperator == -1
+				|| OR.compareTo(String.valueOf(term.charAt(indexOfConcerningOperator))) == 0) {
+			String termToReplaceWithoutBrackets = removeOnlyOuterBracket(termToReplace);
+			p.setProduct(termToReplaceWithoutBrackets);
+			p.setTermToReplace(termToReplace);
+			return null;
+		}
 
 		String factor = null;
 		// look at factor after operator
@@ -192,22 +228,27 @@ public class Factoriser {
 		if (term.indexOf(termToReplace) == 0) {
 			return indexOf + termToReplace.length();
 		} else {
-			int indexOfBracketBeforeBracket = indexOf;
+			int indexOfOperatorBeforeBracket = indexOf - 1;
 			int indexOfBracketAfterBracket = indexOf + termToReplace.length();
 
 			// look at character before bracket
 			if (indexOfBracketAfterBracket == term.length()) {
-				return indexOfBracketAfterBracket;
+				return indexOfOperatorBeforeBracket;
 			}
 
-			if (term.substring(indexOfBracketBeforeBracket - 1, indexOfBracketBeforeBracket).equals(OR)) {
-				if (term.substring(indexOfBracketAfterBracket, indexOfBracketAfterBracket + 1).equals(OR)) {
-					return -1;
+			while (true) {
+				if (term.substring(indexOfOperatorBeforeBracket, indexOfOperatorBeforeBracket + 1).equals(OR)) {
+					if (term.substring(indexOfBracketAfterBracket, indexOfBracketAfterBracket + 1).equals(OR)) {
+						return -1;
+					}
+					return indexOfBracketAfterBracket;
+				} else if (term.substring(indexOfOperatorBeforeBracket, indexOfOperatorBeforeBracket + 1).equals(AND)) {
+					p.setBothSitesWithAND(true);
+					return indexOfOperatorBeforeBracket;
+				} else {
+					indexOfOperatorBeforeBracket--;
+					indexOfBracketAfterBracket++;
 				}
-				return indexOfBracketAfterBracket;
-			} else {
-				p.setBothSitesWithAND(true);
-				return indexOfBracketBeforeBracket - 1;
 			}
 		}
 	}
@@ -405,12 +446,12 @@ public class Factoriser {
 	 * @return
 	 */
 	private static String removeOnlyOuterBracket(String condition) {
-		if (outerBracketsExist(condition)) {
+		while (outerBracketsExist(condition)) {
 			if (!isPositive(condition)) {
 				condition = condition.substring(1, condition.length());
 			}
 			if (condition.startsWith(BRACKETOPEN) && condition.endsWith(BRACKETCLOSE)) {
-				return condition.substring(1, condition.length() - 1);
+				condition = condition.substring(1, condition.length() - 1);
 			}
 		}
 		return condition;
@@ -457,7 +498,7 @@ public class Factoriser {
 		if (contentOfBrackets.isEmpty()) {
 			return false;
 		}
-		if (contentOfBrackets.get(0).length() == condition.length() - 2) {
+		if (contentOfBrackets.get(0).length() == condition.length()) {
 			return true;
 		}
 
